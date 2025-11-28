@@ -2,7 +2,7 @@
 import random
 
 class Card:
-    SUITS = ['Hearts', 'Diamonds', 'Clubs', 'Spades']
+    SUITS = [chr(0x2660), chr(0x2665), chr(0x2666), chr(0x2663)]  # Unicode characters for spades, hearts, diamonds, clubs
     VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace']
     
     def __init__(self, suit, value):
