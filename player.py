@@ -18,6 +18,7 @@ class Player:
             raise ValueError("Not enough chips to bet that amount")
         self._chips -= amount
         self._bet += amount
+        return amount
 
     def receive_card(self, card):
         self._hand.append(card)
