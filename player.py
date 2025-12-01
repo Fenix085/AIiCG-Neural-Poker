@@ -20,6 +20,9 @@ class Player:
         self._bet += amount
         return amount
 
+    def add_chips(self, amount):
+        self._chips += amount
+
     def receive_card(self, card):
         self._hand.append(card)
 
