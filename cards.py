@@ -44,3 +44,7 @@ class Deck:
         dealt_cards = self.cards[:num_cards]
         self.cards = self.cards[num_cards:]
         return dealt_cards
+    
+if __name__ == "__main__":
+    oDeck = Deck()
+    print(oDeck.cards)
