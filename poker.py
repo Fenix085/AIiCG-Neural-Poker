@@ -5,6 +5,7 @@ import cards
 
 oPlayer = player.Player
 oDeck = cards.Deck
+oCard = cards.Card
 
 class Poker:
     STAGES = ['Pre-Flop', 'Flop', 'Turn', 'River']
@@ -30,7 +31,7 @@ class Poker:
         self.current_bet = 0
 
         self.deal_hand_cards()
-
+        
     def deal_hand_cards(self):
         for _ in range(2):
             for p in self.players:
@@ -65,6 +66,19 @@ class Poker:
                 self.current_bet += raise_amount
             case _:
                 raise ValueError("Invalid action type")
+            
+    def action_from_id(self, action_id):
+        match action_id:
+            case 0:
+                return {'type': 'fold'}
+            case 1:
+                return {'type': 'call'}
+            case 2:
+                return {'type': 'raise', 'amount': 10}
+            case 3:
+                return {'type': 'raise', 'amount': 20}
+            case _:
+                raise ValueError("Invalid action id")
             
     def handle_showdown(self):
         # find players who did NOT fold
@@ -112,3 +126,49 @@ class Poker:
         if self.current_player == (self.dealer + 1) % len(self.players):
             self.move_stage()
         return False
+    
+    def multi_hot_hole_cards(self, player_id) -> list:
+        vec = [0.0] * 52
+        hand = self.players[player_id].get_hand()
+        for card in hand:
+            card_id = oCard.encode_card(card)
+            vec[card_id] = 1.0
+        return vec
+    
+    def multi_hot_board_cards(self) -> list:
+        vec = [0.0] * 52
+        for card in self.cards_on_table:
+            card_id = oCard.encode_card(card)
+            vec[card_id] = 1.0
+        return vec
+    
+    def encode_state(self, player_id):
+        hole_vec = self.multi_hot_hole_cards(player_id)
+        board_vec = self.multi_hot_board_cards()
+
+        player = self.players[player_id]
+        opponent = self.players[1 - player_id]
+
+        scale = float(self.starting_chips)
+        stacks = [player.get_chips() / scale, opponent.get_chips() / scale]
+        pot_feat = [self._pot / scale]
+        to_call = max(0, self.current_bet - player.get_bet())
+        to_call_feat = [to_call / scale]
+
+        stage_vec = [0.0] * len(Poker.STAGES)
+        stage_vec[self.current_stage] = 1.0
+
+        is_button = 1.0 if player_id == self.dealer else 0.0
+        is_first = 1.0 if player_id == (self.dealer + 1) % len(self.players) else 0.0
+        position_feat = [is_button, is_first]
+
+        state = (
+            hole_vec +
+            board_vec +
+            stacks +
+            pot_feat +
+            to_call_feat +
+            stage_vec +
+            position_feat
+        )
+        return state
