@@ -16,7 +16,13 @@ class Poker:
         self.players = [oPlayer("Player 0", starting_chips),
                         oPlayer("Player 1", starting_chips)]
         self.dealer = 0
+        self.evaluator = HandEvaluator()
         self.reset_game()
+
+    def reset(self, player_id: int = 0):
+        self.reset_game()
+        return self.encode_state(player_id)
+
     
     def reset_game(self):
         self.deck = oDeck()
@@ -81,21 +87,27 @@ class Poker:
                 raise ValueError("Invalid action id")
             
     def handle_showdown(self):
-        # find players who did NOT fold
-        active_players = [p for p in self.players if not p.folded]
-
+        active_players = [(i, p) for i, p in enumerate(self.players) if not p.folded]
+        
         if len(active_players) == 1:
             # fold case: only one player left, they get the pot
-            winner = active_players[0]
+            winner_id, winner = active_players[0]
         else:
-            # TODO: proper hand evaluation here for real showdown
-            # for now you can just pick the first active player
-            winner = active_players[0]
+            scored = []
+            for i, _ in active_players:
+                hole_cards = self.players[i].get_hand()
+                board_cards = self.cards_on_table
+                score = self.evaluator.score_high_card(hole_cards, board_cards)
+                scored.append((i, score))
 
-        winner._chips += self._pot
+            best_score = max(score for _, score in scored)
+            best_players = [i for i, score in scored if score == best_score]
+
+            winner_id = best_players[0]
+            winner = self.players[winner_id]
+        
+        winner.add_chips(self._pot)
         self._pot = 0
-
-        # Optional: reset bets at end of hand
         for p in self.players:
             p._bet = 0
             
@@ -172,3 +184,9 @@ class Poker:
             position_feat
         )
         return state
+    
+class HandEvaluator:
+    def score_high_card(self, hole_cards, board_cards):
+        all_cards = hole_cards + board_cards
+        best_rank = max(card.rank for card in all_cards)
+        return best_rank
