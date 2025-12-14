@@ -17,10 +17,12 @@ class Poker:
                         oPlayer("Player 1", starting_chips)]
         self.dealer = 0
         self.evaluator = HandEvaluator()
+        self.episode_start_chips = [p.get_chips() for p in self.players]
         self.reset_game()
 
     def reset(self, player_id: int = 0):
         self.reset_game()
+        self.episode_start_chips = [p.get_chips() for p in self.players]
         return self.encode_state(player_id)
 
     
@@ -120,24 +122,28 @@ class Poker:
             self.deal_river()
         elif self.current_stage == 3:
             self.handle_showdown()
-            return
+            return True
         
         self.current_stage += 1
         self.current_bet = 0
         for p in self.players:
             p._bet = 0
+        return False
 
     def step(self, action):
         self.action_handler(self.current_player, action)
+
         folded_count = sum(1 for p in self.players if p.folded)
         if folded_count == len(self.players) - 1:
             self.handle_showdown()
             return True
         
         self.next_player()
+
+        done = False
         if self.current_player == (self.dealer + 1) % len(self.players):
-            self.move_stage()
-        return False
+            done = self.move_stage()
+        return done
     
     def multi_hot_hole_cards(self, player_id) -> list:
         vec = [0.0] * 52
@@ -184,6 +190,30 @@ class Poker:
             position_feat
         )
         return state
+    
+    def step_discrete(self, player_id: int, action_id: int):
+        """Convenience wrapper: step using a discrete action id instead of a dict.
+
+        Returns: next_state, reward, done
+        """
+        # Convert id -> action dict
+        action = self.action_from_id(action_id)
+
+        # For reward, we’ll do: chip delta for this player *only when hand ends*
+        prev_chips = self.players[player_id].get_chips()
+
+        done = self.step(action)  # your existing step(action_dict)
+
+        # Observation from this player's POV
+        next_state = self.encode_state(player_id)
+
+        reward = 0.0
+        if done:
+            current_chips = self.players[player_id].get_chips()
+            reward = current_chips - self.episode_start_chips[player_id]
+
+        return next_state, reward, done
+
     
 class HandEvaluator:
     def score_high_card(self, hole_cards, board_cards):
