@@ -37,3 +37,6 @@ class Player:
     
     def fold(self):
         self.folded = True
+
+    def set_stack(self, chips: int):
+        self._chips = chips

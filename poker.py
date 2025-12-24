@@ -22,6 +22,8 @@ class Poker:
 
     def reset(self, player_id: int = 0):
         self.reset_game()
+        for p in self.players:
+            p.set_stack(self.starting_chips)
         self.episode_start_chips = [p.get_chips() for p in self.players]
         return self.encode_state(player_id)
 
@@ -35,8 +37,20 @@ class Poker:
         self.cards_on_table = []
         self._pot = 0
         self.current_stage = 0
-        self.current_player = (self.dealer + 1) % 2
-        self.current_bet = 0
+        
+        sb = 1 #blinds
+        bb = 2
+
+        dealer = self.dealer
+        sb_player = self.players[dealer]
+        bb_player = self.players[(dealer + 1) % len(self.players)]
+
+        sb_player.place_bet(sb)
+        bb_player.place_bet(bb)
+        self._pot += sb + bb
+        self.current_bet = bb
+
+        self.current_player = (dealer + 2) % len(self.players)
 
         self.deal_hand_cards()
         
@@ -58,20 +72,52 @@ class Poker:
         self.current_player = (self.current_player + 1) % len(self.players)
 
     def action_handler(self, player_id, action):
+        player = self.players[player_id]
+        chips = player.get_chips()
+
         match action['type']:
             case 'fold':
                 self.players[player_id].fold()
+
             case 'call':
-                to_call = self.current_bet - self.players[player_id].get_bet()
-                self.players[player_id].place_bet(to_call)
-                self._pot += to_call
+                to_call = max(0, self.current_bet - player.get_bet())
+                if to_call <= 0:
+                    return
+                
+                call_amount = min(to_call, chips)
+                if call_amount <= 0:
+                    player.fold()
+                    return
+                
+                player.place_bet(call_amount)
+                self._pot += call_amount
+
             case 'raise':
-                to_call = self.current_bet - self.players[player_id].get_bet()
+                to_call = max(0, self.current_bet - player.get_bet())
                 raise_amount = action['amount']
-                total_bet = to_call + raise_amount
-                self.players[player_id].place_bet(total_bet)
+
+                if to_call > chips:
+                    player.fold()
+                    return
+                
+                desired_total = to_call + raise_amount
+
+                if desired_total > chips:
+                    total_bet = to_call
+                    effective_raise = 0
+                else:
+                    total_bet = desired_total
+                    effective_raise = raise_amount
+
+                if total_bet <= 0:
+                    return #treated as check
+                
+                player.place_bet(total_bet)
                 self._pot += total_bet
-                self.current_bet += raise_amount
+
+                if effective_raise > 0:
+                    self.current_bet += effective_raise
+
             case _:
                 raise ValueError("Invalid action type")
             
@@ -198,19 +244,11 @@ class Poker:
         """
         # Convert id -> action dict
         action = self.action_from_id(action_id)
-
-        # For reward, we’ll do: chip delta for this player *only when hand ends*
-        prev_chips = self.players[player_id].get_chips()
-
         done = self.step(action)  # your existing step(action_dict)
-
         # Observation from this player's POV
         next_state = self.encode_state(player_id)
 
         reward = 0.0
-        if done:
-            current_chips = self.players[player_id].get_chips()
-            reward = current_chips - self.episode_start_chips[player_id]
 
         return next_state, reward, done
 
