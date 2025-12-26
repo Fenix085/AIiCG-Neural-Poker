@@ -109,6 +109,6 @@ def evaluate(policy, num_hands=200, learner_id=0):
 
 
 if __name__ == "__main__":
-    trained_policy = train(num_episodes=1000, learner_id=0)
+    trained_policy = train(num_episodes=5000, learner_id=0)
     torch.save(trained_policy.state_dict(), "poker_policy.pt")
     # debug_random_rewards()

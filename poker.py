@@ -21,10 +21,10 @@ class Poker:
         self.reset_game()
 
     def reset(self, player_id: int = 0):
-        self.reset_game()
         for p in self.players:
             p.set_stack(self.starting_chips)
         self.episode_start_chips = [p.get_chips() for p in self.players]
+        self.reset_game()
         return self.encode_state(player_id)
 
     

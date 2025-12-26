@@ -1,70 +1,87 @@
-import random
+import torch
+import torch.nn.functional as F
+
 from poker import Poker
+from network import PokerNet
 
-ACTIONS = [0, 1, 2, 3]  # 0=fold, 1=call, 2=raise+10, 3=raise+20
+ACTIONS = {
+    0: "fold",
+    1: "call/check",
+    2: "raise+10",
+    3: "raise+20"
+}
 
-def random_policy(state):
-    """Completely dumb policy: ignores state, picks random action id."""
-    return random.choice(ACTIONS)
+def ai_choose_action(policy: PokerNet, state_list):
+    state = torch.tensor(state_list, dtype=torch.float32)
+    logits = policy(state)
+    probs = F.softmax(logits, dim=-1)
+    action_id = int(torch.argmax(probs).item())
+    return action_id, probs.detach().tolist()
 
-def print_state(game, title: str):
-    print(f"\n=== {title} ===")
-    print(f"Stage: {Poker.STAGES[game.current_stage]}")
-    print(f"Pot: {game._pot}")
-    print("Board:", ", ".join(str(c) for c in game.cards_on_table) or "(empty)")
-    for i, p in enumerate(game.players):
-        print(
-            f"Player {i}: chips={p.get_chips()}, bet={p.get_bet()}, "
-            f"folded={p.folded}, hand=" +
-            ", ".join(str(c) for c in p.get_hand())
-        )
+def print_state(env: Poker, human_id: int):
+    print("\n=== Table ===")
+    print("Stage:", Poker.STAGES[env.current_stage])
+    board = env.cards_on_table
+    print("Board:", ",".join(map(str, board)) if board else "(empty)")
+    print("Pot:", env._pot)
 
-def play_one_random_hand():
-    game = Poker(starting_chips=100)
+    for i, p in enumerate(env.players):
+        hand = p.get_hand()
+        hand_str = ", ".join(map(str, hand)) if hand else "(no cards?)"
+        role = "Human" if i == human_id else "AI"
+        print(f"Player {i} [{role}] chips = {p.get_chips()} bet = {p.get_bet()} folded = {p.folded} hand = {hand_str if i == human_id else hand_str + " (for debug purposes)"}")
+    
+    to_call = max(0, env.current_bet - env.players[human_id].get_bet())
+    print("Current bet:", env.current_bet, "You need to call:", to_call)
+    print("==============")
 
-    # From the agent's POV we need a player_id.
-    # Let's pretend we're watching Player 0.
-    player_id = 0
-    state = game.reset(player_id)
+def ask_human_action():
+    print("Choose action:")
+    for k, v in ACTIONS.items():
+        print(f"{k}: {v}")
+    while True:
+        s = input("Your action: ")
+        if s.isdigit() and int(s) in ACTIONS:
+            a = int(s)
+            if a in ACTIONS:
+                return int(s)
+        print("Invalid action. Enter 0, 1, 2 or 3.")
 
-    print("Game initialized.")
-    print_state(game, "Start of hand")
+def main():
+    human_id = 0
+    ai_id = 1
 
+    env = Poker(starting_chips=100)
+
+    dummy_state = env.encode_state(player_id = human_id)
+    input_dim = len(dummy_state)
+
+    policy = PokerNet(input_dim=input_dim, hidden_dim = 114, output_dim = 4)
+    policy.load_state_dict(torch.load("poker_policy.pt", map_location = "cpu"))
+    policy.eval()
+
+    env.reset(player_id = human_id)
     done = False
-    step_idx = 0
 
     while not done:
-        current_player = game.current_player
+        current = env.current_player
 
-        # Encode state for the CURRENT player (optional; for random policy we don't use it)
-        state = game.encode_state(current_player)
+        if current == human_id:
+            print_state(env, human_id)
+            action_id = ask_human_action()
+            _, _, done = env.step_discrete(human_id, action_id)
 
-        # Pick action id
-        action_id = random_policy(state)
-        action = game.action_from_id(action_id)
+        else:
+            state = env.encode_state(ai_id)
+            action_id, probs = ai_choose_action(policy, state)
+            print(f"\nAI chooses {action_id} ({ACTIONS[action_id]}) probs={['%.2f' % x for x in probs]}")
+            _, _, done = env.step_discrete(ai_id, action_id)
 
-        print(
-            f"\nStep {step_idx}: Player {current_player}'s turn. "
-            f"Action id={action_id}, action={action}"
-        )
-
-        # You can either use step() with dict:
-        # done = game.step(action)
-        # or the discrete wrapper (from the POV of current_player):
-        next_state, reward, done = game.step_discrete(current_player, action_id)
-
-        print_state(game, "After action")
-
-        if done:
-            print(f"\nHand ended. Last action by Player {current_player}.")
-            print(f"Reward for Player 0 this step (if using RL): {reward}")
-            break
-
-        step_idx += 1
-
-    print("\n=== Final chip counts ===")
-    for i, p in enumerate(game.players):
-        print(f"Player {i}: {p.get_chips()} chips")
+    print_state(env, human_id)
+    print("\n=== Hand over ===")
+    print("Final chips:")
+    print("Human:", env.players[human_id].get_chips())
+    print("AI:", env.players[ai_id].get_chips())
 
 if __name__ == "__main__":
-    play_one_random_hand()
+    main()
