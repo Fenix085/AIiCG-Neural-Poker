@@ -1,5 +1,6 @@
 #poker class
 
+from collections import Counter
 import player
 import cards
 
@@ -140,21 +141,25 @@ class Poker:
         if len(active_players) == 1:
             # fold case: only one player left, they get the pot
             winner_id, winner = active_players[0]
+            winner.add_chips(self._pot)
         else:
-            scored = []
-            for i, _ in active_players:
-                hole_cards = self.players[i].get_hand()
-                board_cards = self.cards_on_table
-                score = self.evaluator.score_high_card(hole_cards, board_cards)
-                scored.append((i, score))
+            score0 = self.evaluator.score(self.players[0].get_hand(), self.cards_on_table)
+            score1 = self.evaluator.score(self.players[1].get_hand(), self.cards_on_table)
 
-            best_score = max(score for _, score in scored)
-            best_players = [i for i, score in scored if score == best_score]
+            if score0 > score1:
+                winner_id = 0
+            elif score1 > score0:
+                winner_id = 1
+            else:
+                winner_id = None
 
-            winner_id = best_players[0]
-            winner = self.players[winner_id]
+            if winner_id is None:
+                split_amount = self._pot // 2
+                self.players[0].add_chips(split_amount)
+                self.players[1].add_chips(self._pot - split_amount)
+            else:
+                self.players[winner_id].add_chips(self._pot)
         
-        winner.add_chips(self._pot)
         self._pot = 0
         for p in self.players:
             p._bet = 0
@@ -254,7 +259,27 @@ class Poker:
 
     
 class HandEvaluator:
-    def score_high_card(self, hole_cards, board_cards):
+
+    HIGH_CARD = 0
+    ONE_PAIR = 1
+
+    def score(self, hole_cards, board_cards):
         all_cards = hole_cards + board_cards
-        best_rank = max(card.rank for card in all_cards)
-        return best_rank
+        ranks = [c.rank for c in all_cards]
+        ranks.sort(reverse=True)
+
+        counts = Counter(ranks)
+
+        pair_ranks = [r for r, cnt in counts.items() if cnt >= 2]
+        if pair_ranks:
+            pair = max(pair_ranks)
+
+            # kickers = best 3 ranks excluding the pair rank
+            kickers = [r for r in ranks if r != pair][:3]
+
+            # (category, pair_rank, kicker1, kicker2, kicker3)
+            return (self.ONE_PAIR, pair, *kickers)
+        
+        # high card: take best 5
+        high5 = ranks[:5]
+        return (self.HIGH_CARD, *high5)

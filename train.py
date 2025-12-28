@@ -76,8 +76,9 @@ def train(num_episodes: int = 1000, learner_id: int = 0):
                 f"loss={loss.item():.3f}"
             )
         if (episode + 1) % 500 == 0:
-            avg, win = evaluate(policy, num_hands=200, learner_id=learner_id)
-            print(f"[EVAL] avg_reward(200)={avg:.2f}, win_rate(200)={win*100:.1f}%")
+            avg0, win0 = evaluate(policy, 200, learner_id=0)
+            avg1, win1 = evaluate(policy, 200, learner_id=1)
+            print(f"[EVAL P0] avg={avg0:.2f} win={win0*100:.1f}% | [EVAL P1] avg={avg1:.2f} win={win1*100:.1f}%")
 
 
     return policy
@@ -109,6 +110,6 @@ def evaluate(policy, num_hands=200, learner_id=0):
 
 
 if __name__ == "__main__":
-    trained_policy = train(num_episodes=5000, learner_id=0)
+    trained_policy = train(num_episodes=10000, learner_id=0)
     torch.save(trained_policy.state_dict(), "poker_policy.pt")
     # debug_random_rewards()
