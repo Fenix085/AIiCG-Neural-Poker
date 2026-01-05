@@ -30,6 +30,7 @@ class Poker:
 
     
     def reset_game(self):
+        self.dealer = 1 - self.dealer
         self.deck = oDeck()
         self.deck.shuffle()
         for p in self.players:
@@ -52,6 +53,8 @@ class Poker:
         self.current_bet = bb
 
         self.current_player = (dealer + 2) % len(self.players)
+
+        self._acted = set()
 
         self.deal_hand_cards()
         
@@ -182,20 +185,35 @@ class Poker:
         return False
 
     def step(self, action):
-        self.action_handler(self.current_player, action)
+        pid = self.current_player
+        prev_bet = self.current_bet
 
-        folded_count = sum(1 for p in self.players if p.folded)
-        if folded_count == len(self.players) - 1:
+        self.action_handler(pid, action)
+
+        if sum(1 for p in self.players if p.folded) == len(self.players) - 1:
+            # only one player left, end hand
             self.handle_showdown()
             return True
         
-        self.next_player()
+        raised = self.current_bet > prev_bet
 
-        done = False
-        if self.current_player == (self.dealer + 1) % len(self.players):
+        if raised:
+            self._acted = {pid}
+        else:
+            self._acted.add(pid)
+
+        if self._betting_round_complete():
             done = self.move_stage()
-        return done
-    
+            if done:
+                return True
+            self._acted = set()
+            self.cuurrent_player = self._first_to_act()
+            return False
+        
+        self.next_player()
+        return False
+
+
     def multi_hot_hole_cards(self, player_id) -> list:
         vec = [0.0] * 52
         hand = self.players[player_id].get_hand()
@@ -256,6 +274,23 @@ class Poker:
         reward = 0.0
 
         return next_state, reward, done
+    
+    def _first_to_act(self):
+        if self.current_stage == 0:
+            return self.dealer
+        return self.dealer + 1 % len(self.players)
+    
+    def _active_ids(self):
+        return [i for i, p in enumerate(self.players) if not p.folded]
+    
+    def _betting_round_complete(self):
+        active = self._active_ids()
+        if not active:
+            return True
+        
+        everyone_acted = all(i in self._acted for i in active)
+        everyone_matched = all(self.players[i].get_bet() == self.current_bet for i in active)
+        return everyone_acted and everyone_matched
 
     
 class HandEvaluator:
